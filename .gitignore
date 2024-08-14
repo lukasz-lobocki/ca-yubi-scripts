@@ -1,0 +1,13 @@
+*.key
+*.old
+*.crt
+*.db
+*.pem
+*.srl
+*.attr
+*.pfx
+*.crt
+*.pk*
+*.csr
+
+ca/
