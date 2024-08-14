@@ -15,18 +15,17 @@ UNDERLINE="\e[4m"
 NOUNDERLINE="\e[0m"
 
 function setup-directory-strucutre() {
-    printf "\n${GREEN}${GREEN}**${NC}${NC} Setting up directory ca/$1\n"
+    printf "\n${GREEN}${GREEN}**${NC}${NC} Setting up the directory ca/$1\n"
     mkdir -p ca/$1/private ca/$1/db
     chmod 700 ca/$1/private
     cp /dev/null ca/$1/db/$1.db
     echo 01 > ca/$1/db/$1.crt.srl
     echo 01 > ca/$1/db/$1.crl.srl
-    openssl rand -base64 30 | tr -dc 'a-zA-Z0-9' \
-        | tee ca/$1/$1-key-pass >/dev/null
+    openssl rand -out ca/$1/$1-key-pass -hex 50
 }
 
 function request-certificate() {
-    printf "\n${GREEN}${GREEN}**${NC}${NC} Issuing signing request ca/$1.csr\n"
+    printf "\n${GREEN}${GREEN}**${NC}${NC} Issuing the signing request ca/$1.csr\n"
     openssl req -new \
         -config ca/$2 \
         -out ca/$1.csr \
@@ -36,7 +35,7 @@ function request-certificate() {
 }
 
 function upload-to-yubi() {    
-    printf "\n${GREEN}${GREEN}**${NC}${NC} Loading ca/$1 to yubikey\n"
+    printf "\n${GREEN}${GREEN}**${NC}${NC} Loading ca/$1 to the yubi slot $2\n"
     ykman piv keys import $2 ca/$1/private/$1.key \
       --touch-policy=CACHED --pin-policy=ONCE \
       --password $(cat ca/$1/$1-key-pass)
@@ -55,8 +54,8 @@ function show-crt-status() {
 }
 
 function shred-file() {
-    printf "\n${GREEN}**${NC} Shreding file $1 from disk\n"
-    shred --remove $1
+    printf "\n${GREEN}**${NC} Shreding the file ca/$1 from disk\n"
+    shred --remove ca/$1
 }
 
 function configure-file {
@@ -75,6 +74,7 @@ function configure-file {
 }
 
 function self-sign-root-cert() {
+    printf "\n${GREEN}**${NC} Self-signing the Root certificate\n"
     openssl ca -selfsign \
         -config ca/${1}-Root.conf \
         -in ca/${1}-Root.csr -passin file:ca/${1}-Root/${1}-Root-key-pass \
@@ -84,6 +84,9 @@ function self-sign-root-cert() {
 }
 
 function root-sign-signing-cert() {
+    printf "\n${GREEN}**${NC} Root signing the Signing certificate\n"
+    printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC} \
+        ${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
     OPENSSL_CONF=scripts/engine-nix.conf \
         openssl x509 -req \
             -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
@@ -93,6 +96,16 @@ function root-sign-signing-cert() {
             -out ca/${1}-Signing.crt -batch \
             -extensions signing_ca_ext    
 }
+
+function pack-signing-to-pfx() {
+    printf "\n${GREEN}**${NC} Packing the Signing certificate to pfx\n"    
+    sed -i 'p' ca/${CA}-Signing/${CA}-Signing-key-pass # Doubling the password, as per openssl -passin-passout requirements
+    openssl pkcs12 -export -inkey ca/${CA}-Signing/private/${CA}-Signing.key -in ca/${CA}-Signing.crt -out ca/${CA}-Signing.pfx \
+        -passin file:ca/${CA}-Signing/${CA}-Signing-key-pass \
+        -passout file:ca/${CA}-Signing/${CA}-Signing-key-pass    
+    sed -i -n '1p' ca/${CA}-Signing/${CA}-Signing-key-pass # Removing the doubled line
+}
+
 main(){
 
     CA="Absolute-Trust"
@@ -103,25 +116,23 @@ main(){
 
     setup-directory-strucutre ${CA}-Root
     configure-file templates/root.conf ${CA}-Root.conf
-    request-certificate ${CA}-Root ${CA}-Root.conf
 
-    printf "\n${GREEN}**${NC} Self-signing root certificate\n"
+    request-certificate ${CA}-Root ${CA}-Root.conf
     self-sign-root-cert ${CA}
     upload-to-yubi ${CA}-Root 9C
     
-    shred-file ca/${CA}-Root/private/${CA}-Root.key
-    shred-file ca/${CA}-Root/${CA}-Root-key-pass
+    shred-file ${CA}-Root/private/${CA}-Root.key
+    shred-file ${CA}-Root/${CA}-Root-key-pass
 
     setup-directory-strucutre ${CA}-Signing
     configure-file templates/signing.conf ${CA}-Signing.conf
-    request-certificate ${CA}-Signing ${CA}-Signing.conf
     
-    printf "\n${GREEN}**${NC} Signing certificate\n"
-    printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}  ${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
+    request-certificate ${CA}-Signing ${CA}-Signing.conf
     root-sign-signing-cert ${CA}
-        
-    shred-file ca/${CA}-Signing.csr
-    shred-file ca/${CA}-Root.csr
+    pack-signing-to-pfx ${CA}
+
+    shred-file ${CA}-Signing.csr
+    shred-file ${CA}-Root.csr
 
     show-yubi-status 9C
     show-crt-status ${CA}-Root
