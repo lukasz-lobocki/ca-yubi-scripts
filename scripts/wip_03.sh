@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Sets up 2-tier PKI. With (1) Root and (2) Signing certificates.
+# Uploads Root certificate to yubi slot 9C
+
 set -uo pipefail
 IFS=$'\n\t'
 
@@ -25,7 +28,7 @@ function setup-directory-strucutre() {
 function request-certificate() {
     printf "\n${GREEN}${GREEN}**${NC}${NC} Issuing signing request ca/$1.csr\n"
     openssl req -new \
-        -config templates/$2 \
+        -config ca/$2 \
         -out ca/$1.csr \
         -newkey ec -pkeyopt ec_paramgen_curve:secp384r1 \
         -keyout ca/$1/private/$1.key -passout file:ca/$1/$1-key-pass \
@@ -59,54 +62,70 @@ function shred-file() {
 function configure-file {
     if [ ! -f "$2" ]; then
         sed \
-        -e "s|{{ CA }}|Absolute-Trust|g" \
-        -e "s|{{ CA_ID }}|Y3|g" \
-        -e "s|{{ MY_ORG_NAME }}|Absolute-Trust|g" \
-        -e "s|{{ MY_ORG_UNIT_NAME }}|Certificate-Authority|g" \
-        -e "s|{{ DOMAIN }}|ideant.pl|g" \
-        $1 > $2
+        -e "s|{{ CA }}|$CA|g" \
+        -e "s|{{ CA_ID }}|$CA_ID|g" \
+        -e "s|{{ MY_ORG_NAME }}|$MY_ORG_NAME|g" \
+        -e "s|{{ MY_ORG_UNIT_NAME }}|$MY_ORG_UNIT_NAME|g" \
+        -e "s|{{ DOMAIN }}|$DOMAIN|g" \
+        $1 > ca/$2
     else
         echo "WARNING using existing configuration $2"
         echo "To re-generate the configuration please remove this file"
     fi
 }
 
-main(){
-
-    configure-file templates/root-t.conf ca/baga.conf
-    
-    setup-directory-strucutre CA-Root
-    request-certificate CA-Root root.conf
-
-    printf "\n${GREEN}**${NC} Self-signing certificate\n"
+function self-sign-root-cert() {
     openssl ca -selfsign \
-        -config templates/root.conf \
-        -in ca/CA-Root.csr -passin file:ca/CA-Root/CA-Root-key-pass \
+        -config ca/${1}-Root.conf \
+        -in ca/${1}-Root.csr -passin file:ca/${1}-Root/${1}-Root-key-pass \
         -days 3652 \
-        -out ca/CA-Root.crt -batch \
+        -out ca/${1}-Root.crt -batch \
         -extensions root_ca_ext
-    upload-to-yubi CA-Root 9C
-    
-    shred-file ca/CA-Root/private/CA-Root.key
-    shred-file ca/CA-Root/CA-Root-key-pass
+}
 
-    setup-directory-strucutre CA-Signing
-    request-certificate CA-Signing issuing.conf
-    
-    printf "\n${GREEN}**${NC} Signing certificate\n"
-    printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
+function root-sign-signing-cert() {
     OPENSSL_CONF=scripts/engine-nix.conf \
         openssl x509 -req \
             -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
-            -extfile templates/root.conf -sha512 -CA ca/CA-Root.crt \
-            -in ca/CA-Signing.csr \
+            -extfile ca/${1}-Root.conf -sha512 -CA ca/${1}-Root.crt \
+            -in ca/${1}-Signing.csr \
             -days 730 \
-            -out ca/CA-Signing.crt -batch \
-            -extensions signing_ca_ext
+            -out ca/${1}-Signing.crt -batch \
+            -extensions signing_ca_ext    
+}
+main(){
+
+    CA="Absolute-Trust"
+    CA_ID="Y3"
+    MY_ORG_NAME="Absolute-Trust"
+    MY_ORG_UNIT_NAME="Certificate-Authority"
+    DOMAIN="ideant.pl"
+
+    setup-directory-strucutre ${CA}-Root
+    configure-file templates/root.conf ${CA}-Root.conf
+    request-certificate ${CA}-Root ${CA}-Root.conf
+
+    printf "\n${GREEN}**${NC} Self-signing root certificate\n"
+    self-sign-root-cert ${CA}
+    upload-to-yubi ${CA}-Root 9C
+    
+    shred-file ca/${CA}-Root/private/${CA}-Root.key
+    shred-file ca/${CA}-Root/${CA}-Root-key-pass
+
+    setup-directory-strucutre ${CA}-Signing
+    configure-file templates/signing.conf ${CA}-Signing.conf
+    request-certificate ${CA}-Signing ${CA}-Signing.conf
+    
+    printf "\n${GREEN}**${NC} Signing certificate\n"
+    printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}  ${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
+    root-sign-signing-cert ${CA}
+        
+    shred-file ca/${CA}-Signing.csr
+    shred-file ca/${CA}-Root.csr
 
     show-yubi-status 9C
-    show-crt-status CA-Root
-    show-crt-status CA-Signing    
+    show-crt-status ${CA}-Root
+    show-crt-status ${CA}-Signing    
 }
 
 main "$@"
