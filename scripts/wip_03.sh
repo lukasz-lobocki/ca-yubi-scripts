@@ -13,7 +13,7 @@ NOUNDERLINE="\e[0m"
 
 function setup-directory-strucutre() {
     printf "\n${GREEN}${GREEN}**${NC}${NC} Setting up directory ca/$1\n"
-    mkdir -p ca/$1/private ca/$1/db crl certs
+    mkdir -p ca/$1/private ca/$1/db
     chmod 700 ca/$1/private
     cp /dev/null ca/$1/db/$1.db
     echo 01 > ca/$1/db/$1.crt.srl
@@ -56,23 +56,14 @@ function shred-file() {
     shred --remove $1
 }
 
-function configure_file {
+function configure-file {
     if [ ! -f "$2" ]; then
         sed \
-        -e "s|COUNTRY|$COUNTRY|g" \
-        -e "s|STATE|$STATE|g" \
-        -e "s|ORG_UNIT|$ORG_UNIT|g" \
-        -e "s|ORG|$ORG|g" \
-        -e "s|DOMAIN|$DOMAIN|g" \
-        -e "s|EMAIL|$EMAIL|g" \
-        -e "s|ROOT_NAME|$ROOT_NAME|g" \
-        -e "s|INT_NAME|$INT_NAME|g" \
-        -e "s|COMMON_NAME|$3|g" \
-        -e "s|EXPIRY_DAYS|$EXPIRY_DAYS|g" \
-        -e "s|CA_EXPIRY_DAYS|$CA_EXPIRY_DAYS|g" \
-        -e "s|INT_EXPIRY_DAYS|$INT_EXPIRY_DAYS|g" \
-        -e "s|CRL_EXPIRY_DAYS|$CRL_EXPIRY_DAYS|g" \
-        -e "s|DIR|$DIR|g" \
+        -e "s|{{ CA }}|Absolute-Trust|g" \
+        -e "s|{{ CA_ID }}|Y3|g" \
+        -e "s|{{ MY_ORG_NAME }}|Absolute-Trust|g" \
+        -e "s|{{ MY_ORG_UNIT_NAME }}|Certificate-Authority|g" \
+        -e "s|{{ DOMAIN }}|ideant.pl|g" \
         $1 > $2
     else
         echo "WARNING using existing configuration $2"
@@ -81,6 +72,9 @@ function configure_file {
 }
 
 main(){
+
+    configure-file templates/root-t.conf ca/baga.conf
+    
     setup-directory-strucutre CA-Root
     request-certificate CA-Root root.conf
 
@@ -100,11 +94,10 @@ main(){
     request-certificate CA-Signing issuing.conf
     
     printf "\n${GREEN}**${NC} Signing certificate\n"
-    printf "\n${RED}**${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}**${NC}\n\n"
-    # remove hardcoded PIN
+    printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
     OPENSSL_CONF=scripts/engine-nix.conf \
         openssl x509 -req \
-            -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private;pin-value=97865358" \
+            -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
             -extfile templates/root.conf -sha512 -CA ca/CA-Root.crt \
             -in ca/CA-Signing.csr \
             -days 730 \
