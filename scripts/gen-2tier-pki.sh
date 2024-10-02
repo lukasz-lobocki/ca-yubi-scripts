@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# ARG_HELP([Sets up 2-tier PKI. With (1) Root and (2) Signing certificates.])
+# ARG_HELP([Sets up 2-tier PKI. With (1) Root and (2) Issuing certificates.])
 # ARG_POSITIONAL_SINGLE([ca],[CA name])
 # ARG_OPTIONAL_SINGLE([ca-id],[i],[short ID appended to CA name],[A1])
 # ARG_OPTIONAL_SINGLE([domain-name],[d],[Two-segment domain name to be embedded in the certificates],[ideant.pl])
@@ -43,7 +43,7 @@ _arg_yubi_slot="9C"
 
 print_help()
 {
-	printf '%s\n' "Sets up 2-tier PKI. With (1) Root and (2) Signing certificates."
+	printf '%s\n' "Sets up 2-tier PKI. With (1) Root and (2) Issuing certificates."
 	printf 'Usage: %s [-h|--help] [-i|--ca-id <arg>] [-d|--domain-name <arg>] [-o|--org-name <arg>] [-u|--org-unit-name <arg>] [-s|--yubi-slot <arg>] <ca>\n' "$0"
 	printf '\t%s\n' "<ca>: CA name"
 	printf '\t%s\n' "-h, --help: Prints help"
@@ -170,7 +170,7 @@ assign_positional_args 1 "${_positionals[@]}"
 
 #!/bin/bash
 
-# Sets up 2-tier PKI. With (1) Root and (2) Signing certificates.
+# Sets up 2-tier PKI. With (1) Root and (2) Issuing certificates.
 # Uploads Root certificate to yubi slot 9C
 
 set -uo pipefail
@@ -195,7 +195,7 @@ function setup-directory-strucutre() {
 }
 
 function request-certificate() {
-    printf "\n${GREEN}${GREEN}**${NC}${NC} Issuing the signing request ca/$1.csr\n"
+    printf "\n${GREEN}${GREEN}**${NC}${NC} Building the signing request ca/$1.csr\n"
     openssl req -new \
         -config ca/$2 \
         -out ca/$1.csr \
@@ -255,27 +255,27 @@ function self-sign-root-cert() {
         -extensions root_ca_ext
 }
 
-function root-sign-signing-cert() {
-    printf "\n${GREEN}**${NC} Root signing the Signing certificate\n"
+function root-sign-issuing-cert() {
+    printf "\n${GREEN}**${NC} The Root signing the Issuing certificate\n"
     printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC} \
         ${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
     OPENSSL_CONF=scripts/engine-nix.conf \
         openssl x509 -req \
             -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
             -extfile ca/${1}-Root.conf -sha512 -CA ca/${1}-Root.crt \
-            -in ca/${1}-Signing.csr \
+            -in ca/${1}-Issuing.csr \
             -days 730 \
-            -out ca/${1}-Signing.crt -batch \
-            -extensions signing_ca_ext    
+            -out ca/${1}-Issuing.crt -batch \
+            -extensions issuing_ca_ext    
 }
 
-function pack-signing-to-pfx() {
-    printf "\n${GREEN}**${NC} Packing the Signing certificate to pfx\n"    
-    sed -i 'p' ca/${CA}-Signing/${CA}-Signing-key-pass # Doubling the password, as per openssl -passin-passout requirements
-    openssl pkcs12 -export -inkey ca/${CA}-Signing/private/${CA}-Signing.key -in ca/${CA}-Signing.crt -out ca/${CA}-Signing.pfx \
-        -passin file:ca/${CA}-Signing/${CA}-Signing-key-pass \
-        -passout file:ca/${CA}-Signing/${CA}-Signing-key-pass    
-    sed -i -n '1p' ca/${CA}-Signing/${CA}-Signing-key-pass # Removing the doubled line
+function pack-issuing-to-pfx() {
+    printf "\n${GREEN}**${NC} Packing the Issuing certificate to pfx\n"    
+    sed -i 'p' ca/${CA}-Issuing/${CA}-Issuing-key-pass # Doubling the password, as per openssl -passin-passout requirements
+    openssl pkcs12 -export -inkey ca/${CA}-Issuing/private/${CA}-Issuing.key -in ca/${CA}-Issuing.crt -out ca/${CA}-Issuing.pfx \
+        -passin file:ca/${CA}-Issuing/${CA}-Issuing-key-pass \
+        -passout file:ca/${CA}-Issuing/${CA}-Issuing-key-pass    
+    sed -i -n '1p' ca/${CA}-Issuing/${CA}-Issuing-key-pass # Removing the doubled line
 }
 
 confirm() {
@@ -306,27 +306,27 @@ main(){
     configure-file templates/root.conf ${CA}-Root.conf
 
     request-certificate ${CA}-Root ${CA}-Root.conf
-    confirm "Do you want to contiue signing this request? [y/N]" || exit 0
+    confirm "Do you want to contiue signing this request for root certificate? [y/N]" || exit 0
     self-sign-root-cert ${CA}
     upload-to-yubi ${CA}-Root 9C
     
     shred-file ${CA}-Root/private/${CA}-Root.key
     shred-file ${CA}-Root/${CA}-Root-key-pass
 
-    setup-directory-strucutre ${CA}-Signing
-    configure-file templates/signing.conf ${CA}-Signing.conf
+    setup-directory-strucutre ${CA}-Issuing
+    configure-file templates/signing.conf ${CA}-Issuing.conf
     
-    request-certificate ${CA}-Signing ${CA}-Signing.conf
-    confirm "Do you want to contiue signing this request? [y/N]" || exit 0
-    root-sign-signing-cert ${CA}
-    pack-signing-to-pfx ${CA}
+    request-certificate ${CA}-Issuing ${CA}-Issuing.conf
+    confirm "Do you want to contiue signing this request for Issuing certificate? [y/N]" || exit 0
+    root-sign-issuing-cert ${CA}
+    pack-issuing-to-pfx ${CA}
 
-    shred-file ${CA}-Signing.csr
+    shred-file ${CA}-Issuing.csr
     shred-file ${CA}-Root.csr
 
     show-yubi-status 9C
     show-crt-status ${CA}-Root
-    show-crt-status ${CA}-Signing    
+    show-crt-status ${CA}-Issuing    
 }
 
 main "$@"
