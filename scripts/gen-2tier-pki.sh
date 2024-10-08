@@ -250,7 +250,7 @@ function self-sign-root-cert() {
     openssl ca -selfsign \
         -config ca/${1}-Root.conf \
         -in ca/${1}-Root.csr -passin file:ca/${1}-Root/${1}-Root-key-pass \
-        -days 3652 \
+        -days 7305 \
         -out ca/${1}-Root.crt -batch \
         -extensions root_ca_ext
 }
@@ -264,7 +264,7 @@ function root-sign-issuing-cert() {
             -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
             -extfile ca/${1}-Root.conf -sha512 -CA ca/${1}-Root.crt \
             -in ca/${1}-Issuing.csr \
-            -days 730 \
+            -days 1461 \
             -out ca/${1}-Issuing.crt -batch \
             -extensions issuing_ca_ext    
 }
