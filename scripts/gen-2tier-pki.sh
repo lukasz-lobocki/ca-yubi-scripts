@@ -314,7 +314,7 @@ main(){
     confirm "Do you want to leave ${CA}-Root/${CA}-Root-key-pass? [y/N]" || shred-file ${CA}-Root/${CA}-Root-key-pass
 
     setup-directory-strucutre ${CA}-Issuing
-    configure-file templates/signing.conf ${CA}-Issuing.conf
+    configure-file templates/issuing.conf ${CA}-Issuing.conf
     
     request-certificate ${CA}-Issuing ${CA}-Issuing.conf
     confirm "Do you want to contiue signing this request for Issuing certificate? [y/N]" || exit 0
