@@ -9,5 +9,6 @@
 *.crt
 *.pk*
 *.csr
+log
 
 ca*/
