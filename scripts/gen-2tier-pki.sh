@@ -262,20 +262,20 @@ function root-sign-issuing-cert() {
     OPENSSL_CONF=scripts/engine-nix.conf \
         openssl x509 -req \
             -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
-            -extfile ca/${1}-Root.conf -sha512 -CA ca/${1}-Root.crt \
-            -in ca/${1}-Issuing.csr \
+            -extfile ca/${1}.conf -sha512 -CA ca/${1}.crt \
+            -in ca/${2}.csr \
             -days 1461 \
-            -out ca/${1}-Issuing.crt -batch \
+            -out ca/${2}.crt -batch \
             -extensions issuing_ca_ext    
 }
 
 function pack-issuing-to-pfx() {
     printf "\n==>> Packing the Issuing certificate to pfx\n"    
-    sed -i 'p' ca/${CA}-Issuing/${CA}-Issuing-key-pass # Doubling the password, as per openssl -passin-passout requirements
-    openssl pkcs12 -export -inkey ca/${CA}-Issuing/private/${CA}-Issuing.key -in ca/${CA}-Issuing.crt -out ca/${CA}-Issuing.pfx \
-        -passin file:ca/${CA}-Issuing/${CA}-Issuing-key-pass \
-        -passout file:ca/${CA}-Issuing/${CA}-Issuing-key-pass    
-    sed -i -n '1p' ca/${CA}-Issuing/${CA}-Issuing-key-pass # Removing the doubled line
+    sed -i 'p' ca/${1}/${1}-key-pass # Doubling the password, as per openssl -passin-passout requirements
+    openssl pkcs12 -export -inkey ca/${1}/private/${1}.key -in ca/${1}.crt -out ca/${1}.pfx \
+        -passin file:ca/${1}/${1}-key-pass \
+        -passout file:ca/${1}/${1}-key-pass    
+    sed -i -n '1p' ca/${1}/${1}-key-pass # Removing the doubled line
 }
 
 confirm() {
@@ -318,8 +318,8 @@ main(){
     
     request-certificate ${CA}-Issuing ${CA}-Issuing.conf
     confirm "Do you want to contiue signing this request for Issuing certificate? [y/N]" || exit 0
-    root-sign-issuing-cert ${CA}
-    pack-issuing-to-pfx ${CA}
+    root-sign-issuing-cert ${CA}-Root ${CA}-Issuing
+    pack-issuing-to-pfx ${CA}-Issuing
 
     confirm "Do you want to leave ${CA}-Issuing.csr? [y/N]" || shred-file ${CA}-Issuing.csr
     confirm "Do you want to leave ${CA}-Root.csr? [y/N]" || shred-file ${CA}-Root.csr
