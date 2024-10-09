@@ -194,6 +194,22 @@ function setup-directory-strucutre() {
     openssl rand -out ca/$1/$1-key-pass -hex 50
 }
 
+function configure-file {
+    if [ ! -f "$2" ]; then
+        sed \
+        -e "s|{{ CA }}|$CA|g" \
+        -e "s|{{ CA_ID }}|$CA_ID|g" \
+        -e "s|{{ MY_ORG_NAME }}|$MY_ORG_NAME|g" \
+        -e "s|{{ MY_ORG_UNIT_NAME }}|$MY_ORG_UNIT_NAME|g" \
+        -e "s|{{ MY_0_DOMAIN_COMPONENT }}|$MY_0_DOMAIN_COMPONENT|g" \
+        -e "s|{{ MY_1_DOMAIN_COMPONENT }}|$MY_1_DOMAIN_COMPONENT|g" \
+        $1 > ca/$2
+    else
+        echo "WARNING using existing configuration $2"
+        echo "To re-generate the configuration please remove this file"
+    fi
+}
+
 function request-certificate() {
     printf "\n==>> Building the signing request ca/$1.csr\n"
     openssl req -new \
@@ -213,50 +229,18 @@ function upload-to-yubi() {
     ykman piv certificates import $2 ca/$1.crt
 }
 
-function show-yubi-status() {
-    printf "\n==>> Yubi slot $1:\n"
-    yubico-piv-tool -a status $1
-}
-
-function show-crt-status() {
-    printf "\n==>> File ca/$1:\n"
-    openssl x509 -in ca/$1.crt -noout -subject -issuer -serial -dates
-    openssl x509 -in ca/$1.crt -fingerprint -sha256 -noout | tr -d ':' | tr 'A-F' 'a-f' | tee ca/$1.fng
-}
-
-function shred-file() {
-    printf "\n==>> Shreding the file ca/$1 from disk\n"
-    shred --remove ca/$1
-}
-
-function configure-file {
-    if [ ! -f "$2" ]; then
-        sed \
-        -e "s|{{ CA }}|$CA|g" \
-        -e "s|{{ CA_ID }}|$CA_ID|g" \
-        -e "s|{{ MY_ORG_NAME }}|$MY_ORG_NAME|g" \
-        -e "s|{{ MY_ORG_UNIT_NAME }}|$MY_ORG_UNIT_NAME|g" \
-        -e "s|{{ MY_0_DOMAIN_COMPONENT }}|$MY_0_DOMAIN_COMPONENT|g" \
-        -e "s|{{ MY_1_DOMAIN_COMPONENT }}|$MY_1_DOMAIN_COMPONENT|g" \
-        $1 > ca/$2
-    else
-        echo "WARNING using existing configuration $2"
-        echo "To re-generate the configuration please remove this file"
-    fi
-}
-
-function self-sign-root-cert() {
-    printf "\n==>> Self-signing the Root certificate\n"
+function self-sign-cert() {
+    printf "\n==>> Self-signing the ${1} certificate\n"
     openssl ca -selfsign \
-        -config ca/${1}-Root.conf \
-        -in ca/${1}-Root.csr -passin file:ca/${1}-Root/${1}-Root-key-pass \
+        -config ca/${1}.conf \
+        -in ca/${1}.csr -passin file:ca/${1}/${1}-key-pass \
         -days 7305 \
-        -out ca/${1}-Root.crt -batch \
+        -out ca/${1}.crt -batch \
         -extensions root_ca_ext
 }
 
-function root-sign-issuing-cert() {
-    printf "\n==>> The Root signing the Issuing certificate\n"
+function sign-cert() {
+    printf "\n==>> The ${1} signing the ${2} certificate\n"
     printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC} \
         ${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
     OPENSSL_CONF=scripts/engine-nix.conf \
@@ -269,8 +253,8 @@ function root-sign-issuing-cert() {
             -extensions issuing_ca_ext    
 }
 
-function pack-issuing-to-pfx() {
-    printf "\n==>> Packing the Issuing certificate to pfx\n"    
+function pack-cert-to-pfx() {
+    printf "\n==>> Packing the ${1} certificate to pfx\n"    
     sed -i 'p' ca/${1}/${1}-key-pass # Doubling the password, as per openssl -passin-passout requirements
     openssl pkcs12 -export -inkey ca/${1}/private/${1}.key -in ca/${1}.crt -out ca/${1}.pfx \
         -passin file:ca/${1}/${1}-key-pass \
@@ -291,6 +275,27 @@ confirm() {
     esac
 }
 
+function show-yubi-status() {
+    printf "\n==>> Yubi slot $1:\n"
+    yubico-piv-tool -a status $1
+}
+
+function show-crt-status() {
+    printf "\n==>> File ca/$1:\n"
+	if [ -z $(which step) ]; then
+    	openssl x509 -in ca/${1}.crt -fingerprint -sha256 -noout | tr -d ':' | tr 'A-F' 'a-f' | tee ca/$1.fng
+		openssl x509 -in ca/${1}.crt -noout -subject -issuer -serial -dates    	
+	else
+		openssl x509 -in ca/${1}.crt -fingerprint -sha256 -noout | tr -d ':' | tr 'A-F' 'a-f' | tee ca/$1.fng
+		step certificate inspect ca/${1}.crt
+	fi
+}
+
+function shred-file() {
+    printf "\n==>> Shreding the file ca/$1 from disk\n"
+    shred --remove ca/$1
+}
+
 main(){
 
     CA=$_arg_ca
@@ -306,8 +311,8 @@ main(){
     configure-file templates/root.conf ${CA}-Root.conf
 
     request-certificate ${CA}-Root ${CA}-Root.conf
-    confirm "Do you want to contiue signing this request for root certificate? [y/N]" || exit 0
-    self-sign-root-cert ${CA}
+    confirm "Do you want to contiue signing ${CA}-Root request for root certificate? [y/N]" || exit 0
+    self-sign-cert ${CA}-Root
     upload-to-yubi ${CA}-Root 9C
     
     confirm "Do you want to leave ${CA}-Root/private/${CA}-Root.key? [y/N]" || shred-file ${CA}-Root/private/${CA}-Root.key
@@ -317,9 +322,9 @@ main(){
     configure-file templates/issuing.conf ${CA}-Issuing.conf
     
     request-certificate ${CA}-Issuing ${CA}-Issuing.conf
-    confirm "Do you want to contiue signing this request for Issuing certificate? [y/N]" || exit 0
-    root-sign-issuing-cert ${CA}-Root ${CA}-Issuing
-    pack-issuing-to-pfx ${CA}-Issuing
+    confirm "Do you want to contiue signing ${CA}-Issuing request for Issuing certificate? [y/N]" || exit 0
+    sign-cert ${CA}-Root ${CA}-Issuing
+    pack-cert-to-pfx ${CA}-Issuing
 
     confirm "Do you want to leave ${CA}-Issuing.csr? [y/N]" || shred-file ${CA}-Issuing.csr
     confirm "Do you want to leave ${CA}-Root.csr? [y/N]" || shred-file ${CA}-Root.csr
