@@ -310,8 +310,8 @@ main(){
     self-sign-root-cert ${CA}
     upload-to-yubi ${CA}-Root 9C
     
-    shred-file ${CA}-Root/private/${CA}-Root.key
-    shred-file ${CA}-Root/${CA}-Root-key-pass
+    confirm "Do you want to leave ${CA}-Root/private/${CA}-Root.key? [y/N]" || shred-file ${CA}-Root/private/${CA}-Root.key
+    confirm "Do you want to leave ${CA}-Root/${CA}-Root-key-pass? [y/N]" || shred-file ${CA}-Root/${CA}-Root-key-pass
 
     setup-directory-strucutre ${CA}-Issuing
     configure-file templates/signing.conf ${CA}-Issuing.conf
@@ -321,8 +321,8 @@ main(){
     root-sign-issuing-cert ${CA}
     pack-issuing-to-pfx ${CA}
 
-    shred-file ${CA}-Issuing.csr
-    shred-file ${CA}-Root.csr
+    confirm "Do you want to leave ${CA}-Issuing.csr? [y/N]" || shred-file ${CA}-Issuing.csr
+    confirm "Do you want to leave ${CA}-Root.csr? [y/N]" || shred-file ${CA}-Root.csr
 
     show-yubi-status 9C
     show-crt-status ${CA}-Root
