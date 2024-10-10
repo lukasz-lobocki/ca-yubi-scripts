@@ -319,20 +319,10 @@ main(){
     confirm "Do you want to leave ${CA}-Root/private/${CA}-Root.key? [y/N]" || shred-file ${CA}-Root/private/${CA}-Root.key
     confirm "Do you want to leave ${CA}-Root/${CA}-Root-key-pass? [y/N]" || shred-file ${CA}-Root/${CA}-Root-key-pass
 
-    setup-directory-strucutre ${CA}-Issuing
-    configure-file templates/issuing.conf ${CA}-Issuing.conf
-    
-    request-certificate ${CA}-Issuing ${CA}-Issuing.conf
-    confirm "Do you want to contiue signing ${CA}-Issuing request for Issuing certificate? [y/N]" || exit 0
-    sign-cert ${CA}-Root ${CA}-Issuing
-    pack-cert-to-pfx ${CA}-Issuing
-
-    confirm "Do you want to leave ${CA}-Issuing.csr? [y/N]" || shred-file ${CA}-Issuing.csr
     confirm "Do you want to leave ${CA}-Root.csr? [y/N]" || shred-file ${CA}-Root.csr
 
     show-yubi-status 9C
     show-crt-status ${CA}-Root
-    show-crt-status ${CA}-Issuing
 	printf "\n==> Time: $(date)\n"
 }
 

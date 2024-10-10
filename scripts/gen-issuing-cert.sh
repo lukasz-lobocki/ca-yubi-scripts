@@ -308,17 +308,6 @@ main(){
     MY_0_DOMAIN_COMPONENT="${DOMAIN##*.}"
 
 	printf "\n==> Time: $(date)\n"
-    setup-directory-strucutre ${CA}-Root
-    configure-file templates/root.conf ${CA}-Root.conf
-
-    request-certificate ${CA}-Root ${CA}-Root.conf
-    confirm "Do you want to contiue signing ${CA}-Root request for root certificate? [y/N]" || exit 0
-    self-sign-cert ${CA}-Root
-    upload-to-yubi ${CA}-Root 9C
-    
-    confirm "Do you want to leave ${CA}-Root/private/${CA}-Root.key? [y/N]" || shred-file ${CA}-Root/private/${CA}-Root.key
-    confirm "Do you want to leave ${CA}-Root/${CA}-Root-key-pass? [y/N]" || shred-file ${CA}-Root/${CA}-Root-key-pass
-
     setup-directory-strucutre ${CA}-Issuing
     configure-file templates/issuing.conf ${CA}-Issuing.conf
     
@@ -328,10 +317,8 @@ main(){
     pack-cert-to-pfx ${CA}-Issuing
 
     confirm "Do you want to leave ${CA}-Issuing.csr? [y/N]" || shred-file ${CA}-Issuing.csr
-    confirm "Do you want to leave ${CA}-Root.csr? [y/N]" || shred-file ${CA}-Root.csr
 
     show-yubi-status 9C
-    show-crt-status ${CA}-Root
     show-crt-status ${CA}-Issuing
 	printf "\n==> Time: $(date)\n"
 }
