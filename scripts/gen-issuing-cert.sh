@@ -296,6 +296,10 @@ function shred-file() {
     shred --remove ca/$1
 }
 
+function get-yubi-root() {
+	ykman piv certificates export ${2} ca/${1}.crt
+}
+
 main(){
 
     CA=$_arg_ca
@@ -303,13 +307,17 @@ main(){
     MY_ORG_NAME=$_arg_org_name
     MY_ORG_UNIT_NAME=$_arg_org_unit_name
     DOMAIN=$_arg_domain_name
+	SLOT=$_arg_yubi_slot
 
     MY_1_DOMAIN_COMPONENT="${DOMAIN%.*}"
     MY_0_DOMAIN_COMPONENT="${DOMAIN##*.}"
 
 	printf "\n==> Time: $(date)\n"
+	setup-directory-strucutre ${CA}-Root
+    configure-file templates/root.conf ${CA}-Root.conf
     setup-directory-strucutre ${CA}-Issuing
     configure-file templates/issuing.conf ${CA}-Issuing.conf
+	get-yubi-root ${CA}-Root ${SLOT}
     
     request-certificate ${CA}-Issuing ${CA}-Issuing.conf
     confirm "Do you want to contiue signing ${CA}-Issuing request for Issuing certificate? [y/N]" || exit 0
@@ -318,7 +326,7 @@ main(){
 
     confirm "Do you want to leave ${CA}-Issuing.csr? [y/N]" || shred-file ${CA}-Issuing.csr
 
-    show-yubi-status 9C
+    show-yubi-status ${SLOT}
     show-crt-status ${CA}-Issuing
 	printf "\n==> Time: $(date)\n"
 }
