@@ -185,17 +185,18 @@ UNDERLINE="\e[4m"
 NOUNDERLINE="\e[0m"
 
 function setup-directory-strucutre() {
-    printf "\n==>> Setting up the directory ca/$1\n"
-    mkdir -p ca/$1/private ca/$1/db
-    chmod 700 ca/$1/private
-    cp /dev/null ca/$1/db/$1.db
-    echo 01 > ca/$1/db/$1.crt.srl
-    echo 01 > ca/$1/db/$1.crl.srl
-    openssl rand -out ca/$1/$1-key-pass -hex 50
+    printf "\n==>> Setting up the directory ${1}/${2}\n"
+    mkdir -p ${1}/${2}/private ${1}/${2}/db
+    chmod 700 ${1}/${2}/private
+    cp /dev/null ${1}/${2}/db/${2}.db
+    echo 01 > ${1}/${2}/db/${2}.crt.srl
+    echo 01 > ${1}/${2}/db/${2}.crl.srl
+    openssl rand -out ${1}/${2}/${2}-key-pass -hex 50
 }
 
 function configure-file {
-    if [ ! -f "$2" ]; then
+    if [ ! -f "${2}${3}" ]; then
+		printf "\n==>> Configuring file ${1} onto ${2}/${3}.conf\n"
         sed \
         -e "s|{{ CA }}|$CA|g" \
         -e "s|{{ CA_ID }}|$CA_ID|g" \
@@ -203,7 +204,7 @@ function configure-file {
         -e "s|{{ MY_ORG_UNIT_NAME }}|$MY_ORG_UNIT_NAME|g" \
         -e "s|{{ MY_0_DOMAIN_COMPONENT }}|$MY_0_DOMAIN_COMPONENT|g" \
         -e "s|{{ MY_1_DOMAIN_COMPONENT }}|$MY_1_DOMAIN_COMPONENT|g" \
-        $1 > ca/$2
+        ${1} > ${2}/${3}.conf
     else
         echo "WARNING using existing configuration $2"
         echo "To re-generate the configuration please remove this file"
@@ -211,61 +212,20 @@ function configure-file {
 }
 
 function request-certificate() {
-    printf "\n==>> Building the signing request ca/$1.csr\n"
+    printf "\n==>> Building the signing request ${1}/${2}.csr\n"
     openssl req -new \
-        -config ca/$2 \
-        -out ca/$1.csr \
+        -config ${1}/${2}.conf \
+        -out ${1}/${2}.csr \
         -newkey ec -pkeyopt ec_paramgen_curve:secp384r1 \
-        -keyout ca/$1/private/$1.key -passout file:ca/$1/$1-key-pass \
+        -keyout ${1}/${2}/private/${2}.key -passout file:${1}/${2}/${2}-key-pass \
         -pubkey -verbose
-    openssl req -in ca/$1.csr -noout -text
-}
-
-function upload-to-yubi() {    
-    printf "\n==>> Loading ca/$1 to the yubi slot $2\n"
-    ykman piv keys import $2 ca/$1/private/$1.key \
-      --touch-policy=CACHED --pin-policy=ONCE \
-      --password $(cat ca/$1/$1-key-pass)
-    ykman piv certificates import $2 ca/$1.crt
-}
-
-function self-sign-cert() {
-    printf "\n==>> Self-signing the ${1} certificate\n"
-    openssl ca -selfsign \
-        -config ca/${1}.conf \
-        -in ca/${1}.csr -passin file:ca/${1}/${1}-key-pass \
-        -days 7305 \
-        -out ca/${1}.crt -batch \
-        -extensions root_ca_ext
-}
-
-function sign-cert() {
-    printf "\n==>> The ${1} signing the ${2} certificate\n"
-    printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC} \
-        ${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
-    OPENSSL_CONF=scripts/engine-nix.conf \
-        openssl x509 -req \
-            -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
-            -extfile ca/${1}.conf -sha512 -CA ca/${1}.crt \
-            -in ca/${2}.csr \
-            -days 1461 \
-            -out ca/${2}.crt -batch \
-            -extensions issuing_ca_ext    
-}
-
-function pack-cert-to-pfx() {
-    printf "\n==>> Packing the ${1} certificate to pfx\n"    
-    sed -i 'p' ca/${1}/${1}-key-pass # Doubling the password, as per openssl -passin-passout requirements
-    openssl pkcs12 -export -inkey ca/${1}/private/${1}.key -in ca/${1}.crt -out ca/${1}.pfx \
-        -passin file:ca/${1}/${1}-key-pass \
-        -passout file:ca/${1}/${1}-key-pass    
-    sed -i -n '1p' ca/${1}/${1}-key-pass # Removing the doubled line
+    openssl req -in ${1}/${2}.csr -noout -text
 }
 
 confirm() {
     # call with a prompt string or use a default
     read -r -p "${1:-Are you sure? [y/N]} " response
-    case "$response" in
+    case "${response}" in
         [yY][eE][sS]|[yY]) 
             true
             ;;
@@ -275,64 +235,133 @@ confirm() {
     esac
 }
 
-function show-yubi-status() {
-    printf "\n==>> Yubi slot $1:\n"
-    yubico-piv-tool -a status $1
-}
-
 function show-crt-status() {
-    printf "\n==>> File ca/$1:\n"
+    printf "\n==>> File ${1}/${2}.crt:\n"
 	if [ -z $(which step) ]; then
-    	openssl x509 -in ca/${1}.crt -fingerprint -sha256 -noout | tr -d ':' | tr 'A-F' 'a-f' | tee ca/$1.fng
-		openssl x509 -in ca/${1}.crt -noout -subject -issuer -serial -dates    	
+    	openssl x509 -in ${1}/${2}.crt -fingerprint -sha256 -noout | tr -d ':' | tr 'A-F' 'a-f'
+		openssl x509 -in ${1}/${2}.crt -noout -subject -issuer -serial -dates    	
 	else
-		openssl x509 -in ca/${1}.crt -fingerprint -sha256 -noout | tr -d ':' | tr 'A-F' 'a-f' | tee ca/$1.fng
-		step certificate inspect ca/${1}.crt
+		openssl x509 -in ${1}/${2}.crt -fingerprint -sha256 -noout | tr -d ':' | tr 'A-F' 'a-f'
+		step certificate inspect ${1}/${2}.crt
 	fi
 }
 
 function shred-file() {
-    printf "\n==>> Shreding the file ca/$1 from disk\n"
-    shred --remove ca/$1
+    printf "\n==>> Shreding the file ${1}/${2} from disk\n"
+    shred --remove ${1}/${2}
 }
 
 main(){
 
     CA=$_arg_ca
-    CA_ID=$_arg_ca_id
+	if [[ -n "${_arg_ca_id}" ]]; then
+		CA_ID="-${_arg_ca_id}"
+	fi
     MY_ORG_NAME=$_arg_org_name
     MY_ORG_UNIT_NAME=$_arg_org_unit_name
-    DOMAIN=$_arg_domain_name
+    MY_1_DOMAIN_COMPONENT="${_arg_domain_name%.*}"
+    MY_0_DOMAIN_COMPONENT="${_arg_domain_name##*.}"
 
-    MY_1_DOMAIN_COMPONENT="${DOMAIN%.*}"
-    MY_0_DOMAIN_COMPONENT="${DOMAIN##*.}"
+	MY_ROOT_BASEFILENAME="${CA}-Root${CA_ID}"
+	MY_ISSUING_BASEFILENAME="${CA}-Issuing${CA_ID}"
+	MY_CA_BASEFOLDER="ca"
 
 	printf "\n==> Time: $(date)\n"
-    setup-directory-strucutre ${CA}-Root
-    configure-file templates/root.conf ${CA}-Root.conf
+    setup-directory-strucutre \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ROOT_BASEFILENAME}"
+    configure-file \
+		"templates/root.conf" \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ROOT_BASEFILENAME}"
 
-    request-certificate ${CA}-Root ${CA}-Root.conf
-    confirm "Do you want to contiue signing ${CA}-Root request for root certificate? [y/N]" || exit 0
-    self-sign-cert ${CA}-Root
-    upload-to-yubi ${CA}-Root 9C
-    
-    confirm "Do you want to leave ${CA}-Root/private/${CA}-Root.key? [y/N]" || shred-file ${CA}-Root/private/${CA}-Root.key
-    confirm "Do you want to leave ${CA}-Root/${CA}-Root-key-pass? [y/N]" || shred-file ${CA}-Root/${CA}-Root-key-pass
+    request-certificate \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ROOT_BASEFILENAME}"
+    confirm "Do you want to contiue signing ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}.csr request for Root certificate? [y/N]" \
+		|| exit 0
 
-    setup-directory-strucutre ${CA}-Issuing
-    configure-file templates/issuing.conf ${CA}-Issuing.conf
-    
-    request-certificate ${CA}-Issuing ${CA}-Issuing.conf
-    confirm "Do you want to contiue signing ${CA}-Issuing request for Issuing certificate? [y/N]" || exit 0
-    sign-cert ${CA}-Root ${CA}-Issuing
-    pack-cert-to-pfx ${CA}-Issuing
+    printf "\n==>> Self-signing the ${CA}-Root certificate\n"
+    openssl ca -selfsign \
+        -config "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".conf \
+        -in "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".csr \
+		-passin file:"${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/${MY_ROOT_BASEFILENAME}"-key-pass \
+        -out "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt -batch \
+        -days 7305 \
+        -extensions root_ca_ext
 
-    confirm "Do you want to leave ${CA}-Issuing.csr? [y/N]" || shred-file ${CA}-Issuing.csr
-    confirm "Do you want to leave ${CA}-Root.csr? [y/N]" || shred-file ${CA}-Root.csr
+    printf "\n==>> Loading ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME} key and certificate to the yubi slot 9C\n"
+    ykman piv \
+		keys import 9C "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/private/${MY_ROOT_BASEFILENAME}".key \
+    	--touch-policy=CACHED --pin-policy=ONCE \
+    	--password $(cat "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/${MY_ROOT_BASEFILENAME}"-key-pass)
+    ykman piv \
+		certificates import \
+		9C \
+		"${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt
 
-    show-yubi-status 9C
-    show-crt-status ${CA}-Root
-    show-crt-status ${CA}-Issuing
+    confirm "Do you want to leave ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/private/${MY_ROOT_BASEFILENAME}.key? [y/N]" \
+		|| shred-file \
+			"${MY_CA_BASEFOLDER}" \
+			"${MY_ROOT_BASEFILENAME}/private/${MY_ROOT_BASEFILENAME}".key
+    confirm "Do you want to leave ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/${MY_ROOT_BASEFILENAME}-key-pass? [y/N]" \
+		|| shred-file \
+			"${MY_CA_BASEFOLDER}" \
+			"${MY_ROOT_BASEFILENAME}/${MY_ROOT_BASEFILENAME}"-key-pass
+
+	setup-directory-strucutre \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ISSUING_BASEFILENAME}"
+    configure-file \
+		"templates/issuing.conf" \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ISSUING_BASEFILENAME}"
+
+    request-certificate \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ISSUING_BASEFILENAME}"
+
+	confirm "Do you want to contiue signing ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.csr request for Issuing certificate? [y/N]" \
+		|| exit 0
+
+    printf "\n==>> The ${CA}-Root signing the ${CA}-Issuing certificate\n"
+    printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
+    OPENSSL_CONF=/usr/lib/x86_64-linux-gnu/engines-3/pkcs11.so \
+        openssl x509 -req \
+            -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
+            -in "${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}".csr \
+			-extfile "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".conf -sha512 \
+			-CA "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt \
+            -out ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.crt -batch \
+			-days 1461 \
+            -extensions issuing_ca_ext
+
+    printf "\n==>> Packing the ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME} certificate to pfx\n"    
+    sed -i 'p' ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/${MY_ISSUING_BASEFILENAME}-key-pass # Doubling the password, as per openssl -passin-passout requirements
+    openssl pkcs12 -export \
+		-inkey ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/private/${MY_ISSUING_BASEFILENAME}.key \
+		-in ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.crt \
+		-out ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.pfx \
+        -passin file:${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/${MY_ISSUING_BASEFILENAME}-key-pass \
+        -passout file:${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/${MY_ISSUING_BASEFILENAME}-key-pass    
+    sed -i -n '1p' ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/${MY_ISSUING_BASEFILENAME}-key-pass # Removing the doubled line
+
+    confirm "Do you want to leave ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.csr? [y/N]" \
+		|| shred-file \
+			"${MY_CA_BASEFOLDER}" \
+			"${MY_ISSUING_BASEFILENAME}".csr
+    confirm "Do you want to leave ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}.csr? [y/N]" \
+		|| shred-file \
+			"${MY_CA_BASEFOLDER}" \
+			"${MY_ROOT_BASEFILENAME}".csr
+
+    ykman piv info
+    show-crt-status \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ROOT_BASEFILENAME}"
+    show-crt-status \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ISSUING_BASEFILENAME}"
 	printf "\n==> Time: $(date)\n"
 }
 
