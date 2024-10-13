@@ -361,7 +361,7 @@ function gen-issuing(){
 	confirm "Do you want to contiue with ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}? [y/N]" \
 		|| exit 0
 
-	# Correct CRL and AIA addresses in .conf using information from root certificate
+	# Clone CRL and AIA addresses from root certificate into .conf
 	local CONFAIA=$(cat "${MY_CA_BASEFOLDER}"/"${MY_ROOT_BASEFILENAME}".conf \
 		| awk -F ' ' '/http:\/\/crt/{print $3}')
 	local CERTAIA=$(openssl x509 -text -in "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt -noout \
