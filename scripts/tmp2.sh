@@ -247,7 +247,7 @@ function main() {
 	UNDERLINE="\e[4m"
 	NOUNDERLINE="\e[0m"
 
-	printf "\n==> Time: $(date)\n"
+	printf "\n==>> Time: $(date)\n"
 
 	# Manage parameters
 
@@ -289,11 +289,11 @@ function main() {
 		;;
 	esac
 
-	printf "\n==> Time: $(date)\n"
+	printf "\n==>> Time: $(date)\n"
 }
 
 function gen-root(){
-	printf "\n==> Root generation\n"
+	printf "\n==>> Root certificate generation\n"
 	setup-directory-strucutre \
 		"${MY_CA_BASEFOLDER}" \
 		"${MY_ROOT_BASEFILENAME}"
@@ -308,7 +308,7 @@ function gen-root(){
     confirm "Do you want to contiue signing ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}.csr request for Root certificate? [y/N]" \
 		|| exit 0
 
-    printf "\n==>> Self-signing the ${CA}-Root certificate\n"
+    printf "\n==>> Self-signing the ${MY_ROOT_BASEFILENAME} certificate\n"
     openssl ca -selfsign \
         -config "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".conf \
         -in "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".csr \
@@ -343,8 +343,87 @@ function gen-root(){
 }
 
 function gen-issuing(){
-	echo "rob issunig"
+	printf "\n==>> Issuing certificate generation\n"
+	setup-directory-strucutre \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ROOT_BASEFILENAME}"
+    configure-file \
+		"templates/root.conf" \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ROOT_BASEFILENAME}"
+
+	printf "\n==>> Getting the file ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}.crt from yubi slot 9C\n"
+	ykman piv \
+		certificates export 9C "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt
+	show-crt-status \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ROOT_BASEFILENAME}"
+	confirm "Do you want to contiue with ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}? [y/N]" \
+		|| exit 0
+
+	# Correct CRL and AIA addresses in .conf using information from root certificate
+	local CURRENTAIA=$(cat "${MY_CA_BASEFOLDER}"/"${MY_ROOT_BASEFILENAME}".conf \
+		| awk -F ' ' '/http:\/\/crt/{print $3}')
+	local PROPERAIA=$(openssl x509 -text -in "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt -noout \
+		| awk -F 'URI:' '/http:\/\/crt/{print $2}')
+	local CURRENTCRL=$(cat "${MY_CA_BASEFOLDER}"/"${MY_ROOT_BASEFILENAME}".conf \
+		| awk -F ' ' '/\/1.0\/crl/{print $3}')
+	local PROPERCRL=$(openssl x509 -text -in "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt -noout \
+		| awk -F 'URI:' '/\/1.0\/crl/{print $2}')
+	sed -i \
+		-e "s|$CURRENTAIA|$PROPERAIA|g" \
+		-e "s|$CURRENTCRL|$PROPERCRL|g" \
+		"${MY_CA_BASEFOLDER}"/"${MY_ROOT_BASEFILENAME}".conf
+
+	setup-directory-strucutre \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ISSUING_BASEFILENAME}"
+    configure-file \
+		"templates/issuing.conf" \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ISSUING_BASEFILENAME}"
+
+    request-certificate \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ISSUING_BASEFILENAME}"
+
+	confirm "Do you want to contiue signing ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.csr request for Issuing certificate? [y/N]" \
+		|| exit 0
+
+    printf "\n==>> The ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}.crt signing the ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.crt certificate\n"
+    printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
+    OPENSSL_CONF=/usr/lib/x86_64-linux-gnu/engines-3/pkcs11.so \
+        openssl x509 -req \
+            -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
+            -in "${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}".csr \
+			-extfile "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".conf -sha512 \
+			-CA "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt \
+            -out ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.crt -batch \
+			-days 1461 \
+            -extensions issuing_ca_ext
+
+    printf "\n==>> Packing the ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME} certificate to pfx\n"    
+    sed -i 'p' ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/${MY_ISSUING_BASEFILENAME}-key-pass # Doubling the password, as per openssl -passin-passout requirements
+    openssl pkcs12 -export \
+		-inkey ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/private/${MY_ISSUING_BASEFILENAME}.key \
+		-in ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.crt \
+		-out ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.pfx \
+        -passin file:${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/${MY_ISSUING_BASEFILENAME}-key-pass \
+        -passout file:${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/${MY_ISSUING_BASEFILENAME}-key-pass    
+    sed -i -n '1p' ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}/${MY_ISSUING_BASEFILENAME}-key-pass # Removing the doubled line
+
+    confirm "Do you want to leave ${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}.csr? [y/N]" \
+		|| shred-file \
+			"${MY_CA_BASEFOLDER}" \
+			"${MY_ISSUING_BASEFILENAME}".csr
+
+    ykman piv info    
+    show-crt-status \
+		"${MY_CA_BASEFOLDER}" \
+		"${MY_ISSUING_BASEFILENAME}"
 }
+
+### Subroutines ###
 
 function setup-directory-strucutre() {
     printf "\n==>> Setting up the directory ${1}/${2}\n"
