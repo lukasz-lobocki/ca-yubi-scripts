@@ -264,20 +264,21 @@ function main() {
 	local MY_ISSUING_BASEFILENAME="${_arg_cn}-Issuing${_arg_cn_id}"
 	
 	# Remove default first 2 elements, if there are any user provided
-	if [[ ${#_arg_domain_name[@]} -gt 10 ]]; then
-		die "Too many --domain-name segments, we allow maximum 10" 1
-	fi
 	if [[ ${#_arg_domain_name[@]} -gt 2 ]]; then
 		_arg_domain_name=(${_arg_domain_name[@]:2})
 	fi
-	
-	local MY_DOMAIN_COMPONENT=$(printf "%s." "${_arg_domain_name[@]}" | tac -s "." | sed 's/\.$//')
-    echo $MY_DOMAIN_COMPONENT
+	if [[ ${#_arg_domain_name[@]} -gt 10 ]]; then
+		die "Too many --domain-name segments, we allow maximum 10" 1
+	fi
+		
 	# Split 10 domain names into 10 variables
 	for i in "${!_arg_domain_name[@]}"; do 
 	  local MY_${i}_DOMAIN_COMPONENT=${_arg_domain_name[$i]}
 	done
-	
+
+	# Concatenate components in reverse order with dots in-between
+	local MY_DOMAIN_COMPONENT=$(printf "%s." "${_arg_domain_name[@]}" | tac -s "." | sed 's/\.$//')
+    	
 	case "${_arg_command}" in
 	gen-root)
 		gen-root
