@@ -77,7 +77,7 @@ _arg_org_unit_name="Certificate Authority"
 print_help()
 {
 	printf '%s\n' "Generates 2-tiered PKI certificates. (1) Root, self-signed put into the yubikey slot 9c and (2) Issuing, signed by the root from the yubikey slot 9c."
-	printf 'Usage: %s [-i|--cn-id <arg>] [-d|--domain-name <arg>] [-o|--org-name <arg>] [-u|--org-unit-name <arg>] [-h|--help] <command> <cn>\n' "$0"
+	printf 'Usage: %s [-i|--cn-id <arg>] [-d|--domain-name <arg>] [-o|--org-name <arg>] [-u|--org-unit-name <arg>] [-h|--help] <command> <cn>\n' "$(basename ${0})"
 	printf '\n\t%s\n' "<command>: Certificate to generate. Can be one of: 'gen-root' and 'gen-issuing'"
 	printf '\t%s\n' "<cn>: Certificate commonName"
 	printf '\n\t%s\n' "-i, --cn-id: Short ID appended to the commonName (default: 'YA1')"
