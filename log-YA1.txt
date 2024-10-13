@@ -1,0 +1,41 @@
+
+==> Time: 2024-10-13T13:24:40 CEST
+
+==>> Setting up the directory ca/Absolute-Trust-Root-YA1
+
+==>> Configuring file templates/root.conf onto ca/Absolute-Trust-Root-YA1.conf
+
+==>> Building the signing request ca/Absolute-Trust-Root-YA1.csr
+Certificate Request:
+    Data:
+        Version: 1 (0x0)
+        Subject: DC = pl, DC = ideant, DC = {{ MY_2_DOMAIN_COMPONENT }}, DC = {{ MY_3_DOMAIN_COMPONENT }}, DC = {{ MY_4_DOMAIN_COMPONENT }}, DC = {{ MY_5_DOMAIN_COMPONENT }}, DC = {{ MY_6_DOMAIN_COMPONENT }}, DC = {{ MY_7_DOMAIN_COMPONENT }}, DC = {{ MY_8_DOMAIN_COMPONENT }}, DC = {{ MY_9_DOMAIN_COMPONENT }}, O = Absolute Trust, OU = Certificate Authority, CN = Absolute-Trust-Root-YA1
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (384 bit)
+                pub:
+                    04:4e:e0:25:af:06:39:f3:d0:04:24:90:c7:01:31:
+                    f9:b7:43:19:d5:f0:ee:1a:bb:76:0a:e2:f7:2e:8f:
+                    f3:6c:90:2f:a3:3a:78:03:cd:70:9d:9f:79:8c:66:
+                    29:03:a3:7c:2e:8f:6c:4c:63:54:b2:d1:7f:01:74:
+                    8a:fe:ca:a8:92:11:69:e2:2a:6e:5e:f3:ba:40:4d:
+                    23:10:27:bd:22:92:5f:0b:81:f5:21:ad:a0:30:af:
+                    55:bb:fa:2c:be:8a:7b
+                ASN1 OID: secp384r1
+                NIST CURVE: P-384
+        Attributes:
+            Requested Extensions:
+                X509v3 Key Usage: critical
+                    Certificate Sign, CRL Sign
+                X509v3 Basic Constraints: critical
+                    CA:TRUE, pathlen:1
+                X509v3 Subject Key Identifier: 
+                    79:93:9A:43:FB:C1:2A:27:CB:E2:D8:6D:23:9E:1B:1B:67:6D:8C:27
+    Signature Algorithm: ecdsa-with-SHA256
+    Signature Value:
+        30:64:02:30:41:c0:71:29:70:bc:d7:f0:39:5f:b8:0a:bb:7f:
+        a4:63:f8:de:00:73:38:77:24:2f:cd:7b:30:7f:d2:7d:07:63:
+        1f:d8:81:04:87:8e:49:7f:34:7c:fe:02:53:d4:a3:b1:02:30:
+        70:9d:9a:aa:0e:c2:1a:c3:90:2e:47:61:b6:74:b3:56:75:3f:
+        d4:f9:e3:6b:98:2a:5b:84:2c:9d:92:08:af:d3:fd:8a:dc:75:
+        80:4d:a8:96:6f:e3:6d:4b:75:0d:fb:e0

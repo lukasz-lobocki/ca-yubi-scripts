@@ -258,7 +258,7 @@ function shred-file() {
 }
 
 main() {
-
+	# echo "  - - Esperança do+ vôo do   avião" | iconv -t ascii//TRANSLIT | sed -E -e 's/[^[:alnum:]]+/-/g' -e 's/^-+|-+$//g'
     CA=$_arg_ca
 	if [[ -n "${_arg_ca_id}" ]]; then
 		CA_ID="-${_arg_ca_id}"

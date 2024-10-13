@@ -314,7 +314,8 @@ main(){
 		|| shred-file \
 			"${MY_CA_BASEFOLDER}" \
 			"${MY_ROOT_BASEFILENAME}/${MY_ROOT_BASEFILENAME}"-key-pass
-    ykman piv info
+    
+	ykman piv info
     show-crt-status \
 		"${MY_CA_BASEFOLDER}" \
 		"${MY_ROOT_BASEFILENAME}"
