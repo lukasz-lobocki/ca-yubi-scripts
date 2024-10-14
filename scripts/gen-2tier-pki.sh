@@ -239,13 +239,12 @@ function main() {
 	set -o pipefail
 	IFS=$'\n\t'
 
-	GREEN='\033[0;32m'
-	RED='\033[0;31m'
+	GREEN='\033[0;32m'; RED='\033[0;31m'
+	BOLD=$(tput bold); NOBOLD=$(tput sgr0)
+	UNDERLINE="\e[4m"; NOUNDERLINE="\e[0m"
 	NC='\033[0m' # No Color
-	BOLD=$(tput bold)
-	NOBOLD=$(tput sgr0)
-	UNDERLINE="\e[4m"
-	NOUNDERLINE="\e[0m"
+
+	SLOT=9C; OPENSSL_SLOT="pkcs11:id=%02;type=private"
 
 	printf "\n==>> Time: $(date)\n"
 
@@ -317,14 +316,14 @@ function gen-root(){
         -days 7305 \
         -extensions root_ca_ext
 
-    printf "\n==>> Loading ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME} key and certificate to the yubi slot 9C\n"
+    printf "\n==>> Loading ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME} key and certificate to the yubi slot ${SLOT}\n"
     ykman piv \
-		keys import 9C "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/private/${MY_ROOT_BASEFILENAME}".key \
+		keys import ${SLOT} "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/private/${MY_ROOT_BASEFILENAME}".key \
     	--touch-policy=CACHED --pin-policy=ONCE \
     	--password $(cat "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/${MY_ROOT_BASEFILENAME}"-key-pass)
     ykman piv \
 		certificates import \
-		9C \
+		${SLOT} \
 		"${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt
 
     confirm "Do you want to leave ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}/private/${MY_ROOT_BASEFILENAME}.key? [y/N]" \
@@ -352,9 +351,9 @@ function gen-issuing(){
 		"${MY_CA_BASEFOLDER}" \
 		"${MY_ROOT_BASEFILENAME}"
 
-	printf "\n==>> Getting the file ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}.crt from yubi slot 9C\n"
+	printf "\n==>> Getting the file ${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}.crt from yubi slot ${SLOT}\n"
 	ykman piv \
-		certificates export 9C "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt
+		certificates export ${SLOT} "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt
 	show-crt-status \
 		"${MY_CA_BASEFOLDER}" \
 		"${MY_ROOT_BASEFILENAME}"
@@ -394,7 +393,7 @@ function gen-issuing(){
     printf "\n${RED}** **${NC} ${BOLD}${UNDERLINE}Touch${NOUNDERLINE} yubi if needed${NOBOLD} ${RED}** **${NC}\n\n"
     OPENSSL_CONF=/usr/lib/x86_64-linux-gnu/engines-3/pkcs11.so \
         openssl x509 -req \
-            -engine pkcs11 -CAkeyform engine -CAkey "pkcs11:id=%02;type=private" \
+            -engine pkcs11 -CAkeyform engine -CAkey "${OPENSSL_SLOT}" \
             -in "${MY_CA_BASEFOLDER}/${MY_ISSUING_BASEFILENAME}".csr \
 			-extfile "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".conf -sha512 \
 			-CA "${MY_CA_BASEFOLDER}/${MY_ROOT_BASEFILENAME}".crt \
